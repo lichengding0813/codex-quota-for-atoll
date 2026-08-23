@@ -25,7 +25,7 @@ final class AtollActivityController {
 
     var onAuthorizationChange: ((Bool) -> Void)?
     var onDismiss: (() -> Void)?
-    var onEnableMonitoring: (() -> Void)?
+    var onRefreshMonitoring: (() async -> Void)?
 
     init() {
         client.onAuthorizationChange { [weak self] authorized in
@@ -35,8 +35,8 @@ final class AtollActivityController {
             self?.hasPresentedExperience = false
             self?.onDismiss?()
         }
-        monitorActionServer.onEnableMonitoring = { [weak self] in
-            self?.onEnableMonitoring?()
+        monitorActionServer.onRefreshMonitoring = { [weak self] in
+            await self?.onRefreshMonitoring?()
         }
     }
 
@@ -116,7 +116,14 @@ final class AtollActivityController {
             || lastPresentedAt.map { Date().timeIntervalSince($0) > 43_200 } == true
 
         if shouldPresentAgain {
-            try await client.presentNotchExperience(descriptor)
+            do {
+                try await client.presentNotchExperience(descriptor)
+            } catch {
+                // Atoll keeps extension cards across plugin relaunches. A new
+                // process has no local presentation state, so presenting the
+                // same ID can fail even though the existing card is updatable.
+                try await client.updateNotchExperience(descriptor)
+            }
             hasPresentedExperience = true
             lastPresentedAt = Date()
             return
@@ -235,9 +242,9 @@ final class AtollActivityController {
         let accent = cssAccent(for: remaining)
         let connectionLabel = codexConnected ? "Codex 在线" : "Codex 离线"
         let connectionClass = codexConnected ? "online" : "offline"
-        let buttonLabel = monitoringEnabled ? "额度监控已启用" : "启用额度监控"
+        let buttonLabel = monitoringEnabled ? "刷新额度" : "启用额度监控"
         let buttonClass = monitoringEnabled ? "enabled" : ""
-        let buttonDisabled = monitoringEnabled || actionURL == nil ? "disabled" : ""
+        let buttonDisabled = actionURL == nil ? "disabled" : ""
         let safeActionURL = escapeJavaScriptSingleQuoted(actionURL ?? "")
         let safe = [plan, nextReset, lastReset, sevenDays, lifetime, updatedAt, connectionLabel, buttonLabel]
             .map(escapeHTML)
@@ -247,13 +254,13 @@ final class AtollActivityController {
         <style>
         *{box-sizing:border-box}html,body{margin:0;width:100%;height:92px;overflow:hidden;background:transparent;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
         .card{height:92px;padding:6px 10px 7px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:rgba(255,255,255,.045);overflow:hidden}
-        .top{height:22px;display:flex;align-items:flex-start;justify-content:flex-end}.controls{display:flex;align-items:center;justify-content:flex-end;gap:7px;white-space:nowrap;color:rgba(255,255,255,.48);font-size:7.5px}.state{display:flex;align-items:center;gap:3px}.dot{display:inline-block;width:4px;height:4px;border-radius:50%}.online,.atoll{background:#2ed18f}.offline{background:#ff5a5f}.sep{color:rgba(255,255,255,.18)}.updated{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.38)}button{height:20px;padding:0 8px;border:1px solid rgba(46,209,143,.34);border-radius:7px;background:rgba(46,209,143,.13);color:#dfffee;font:600 8px/18px -apple-system,sans-serif;cursor:pointer}button:active{transform:scale(.98);background:rgba(46,209,143,.22)}button.enabled,button:disabled{cursor:default;opacity:.65}
+        .top{height:22px;display:flex;align-items:flex-start;justify-content:flex-end}.controls{display:flex;align-items:center;justify-content:flex-end;gap:7px;white-space:nowrap;color:rgba(255,255,255,.48);font-size:7.5px}.state{display:flex;align-items:center;gap:3px}.dot{display:inline-block;width:4px;height:4px;border-radius:50%}.online,.atoll{background:#2ed18f}.offline{background:#ff5a5f}.sep{color:rgba(255,255,255,.18)}.updated{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.38)}button{height:20px;padding:0 8px;border:1px solid rgba(46,209,143,.34);border-radius:7px;background:rgba(46,209,143,.13);color:#dfffee;font:600 8px/18px -apple-system,sans-serif;cursor:pointer}button:active{transform:scale(.98);background:rgba(46,209,143,.22)}button.enabled{border-color:rgba(46,209,143,.46);background:rgba(46,209,143,.16)}button:disabled{cursor:wait;opacity:.58}
         .data{height:57px;display:grid;grid-template-columns:3fr 1fr 1fr;gap:10px;align-items:stretch}.quota{display:flex;flex-direction:column;justify-content:center;padding-right:2px}.quota-head{display:flex;align-items:baseline;gap:7px}.pct{font:720 25px/26px ui-rounded,-apple-system,sans-serif;color:\(accent);letter-spacing:-.8px}.quota-label{font-size:8px;color:rgba(255,255,255,.42)}.bar{height:5px;margin:5px 0 4px;border-radius:9px;background:rgba(255,255,255,.13);overflow:hidden}.fill{height:100%;width:\(remaining)%;background:\(accent);border-radius:9px}.plan{font:650 8px/9px -apple-system,sans-serif;letter-spacing:.65px;color:rgba(255,255,255,.55)}
         .reset,.usage{display:flex;flex-direction:column;justify-content:center;border-left:1px solid rgba(255,255,255,.08);padding-left:10px}.row,.metric{display:flex;align-items:baseline;justify-content:space-between;gap:5px;line-height:23px;white-space:nowrap}.row span,.label{font-size:7.5px;color:rgba(255,255,255,.43)}.row b{font-size:9px;font-weight:620;font-variant-numeric:tabular-nums}.value{font:650 9.5px/12px ui-monospace,"SF Mono",monospace;white-space:nowrap}
         </style></head><body><div class="card">
-          <div class="top"><div class="controls"><span class="state"><i class="dot \(connectionClass)"></i>\(safe[6])</span><span class="sep">·</span><span class="state"><i class="dot atoll"></i>Atoll 在线</span><span class="updated">更新 \(safe[5])</span><button id="monitor" class="\(buttonClass)" onclick="enableMonitoring()" \(buttonDisabled)>\(safe[7])</button></div></div>
+          <div class="top"><div class="controls"><span class="state"><i class="dot \(connectionClass)"></i>\(safe[6])</span><span class="sep">·</span><span class="state"><i class="dot atoll"></i>Atoll 在线</span><span class="updated">更新 \(safe[5])</span><button id="monitor" class="\(buttonClass)" onclick="refreshMonitoring()" \(buttonDisabled)>\(safe[7])</button></div></div>
           <div class="data"><div class="quota"><div class="quota-head"><div class="pct">\(remaining)%</div><div class="quota-label">剩余额度</div></div><div class="bar"><div class="fill"></div></div><div class="plan">\(safe[0])</div></div><div class="reset"><div class="row"><span>下次</span><b>\(safe[1])</b></div><div class="row"><span>上次</span><b>\(safe[2])</b></div></div><div class="usage"><div class="metric"><div class="label">近 7 天</div><div class="value">\(safe[3])</div></div><div class="metric"><div class="label">累计</div><div class="value">\(safe[4])</div></div></div></div>
-        <script>async function enableMonitoring(){const b=document.getElementById('monitor');if(b.disabled)return;b.disabled=true;b.textContent='正在启用…';try{const r=await fetch('\(safeActionURL)',{cache:'no-store'});if(!r.ok)throw new Error();b.className='enabled';b.textContent='额度监控已启用'}catch(e){b.disabled=false;b.textContent='启用失败，请重试'}}</script>
+        <script>async function refreshMonitoring(){const b=document.getElementById('monitor');if(b.disabled)return;const first=!b.classList.contains('enabled');b.disabled=true;b.textContent=first?'正在启用…':'刷新中…';try{const r=await fetch('\(safeActionURL)',{cache:'no-store'});if(!r.ok)throw new Error();b.className='enabled';b.textContent='已刷新 ✓';setTimeout(()=>{b.disabled=false;b.textContent='刷新额度'},650)}catch(e){b.disabled=false;b.textContent=first?'启用失败，重试':'刷新失败，重试'}}</script>
         </div></body></html>
         """
     }

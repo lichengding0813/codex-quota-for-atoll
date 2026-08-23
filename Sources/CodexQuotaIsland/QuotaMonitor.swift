@@ -40,8 +40,8 @@ final class QuotaMonitor: ObservableObject {
             self?.atollCardVisible = false
             self?.atollStatus = "Atoll 翻页卡片已被关闭"
         }
-        atoll.onEnableMonitoring = { [weak self] in
-            self?.enableMonitoring()
+        atoll.onRefreshMonitoring = { [weak self] in
+            await self?.activateOrRefreshMonitoring()
         }
     }
 
@@ -131,29 +131,31 @@ final class QuotaMonitor: ObservableObject {
         atoll.openAtoll()
     }
 
-    func enableMonitoring() {
-        guard !monitoringEnabled else { return }
-        monitoringEnabled = true
-        startRefreshLoop()
-
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            if let snapshot = self.snapshot {
-                await self.publishToAtoll(
-                    snapshot,
-                    codexConnected: self.codexConnected
-                )
-            }
-            await self.refresh()
+    func activateOrRefreshMonitoring() async {
+        if !monitoringEnabled {
+            monitoringEnabled = true
+            startRefreshLoop()
         }
+
+        // A card click can arrive while launch-time or menu-bar refresh work is
+        // still running. Wait for that request and then perform the user's
+        // explicit refresh instead of silently discarding the click.
+        while isRefreshing {
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        await refresh()
     }
 
     private func startRefreshLoop() {
         refreshLoop?.cancel()
         refreshLoop = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 60_000_000_000)
-                guard !Task.isCancelled, let self else { return }
+                guard let self else { return }
+                let interval: UInt64 = self.codexConnected
+                    ? 60_000_000_000
+                    : 15_000_000_000
+                try? await Task.sleep(nanoseconds: interval)
+                guard !Task.isCancelled else { return }
                 await self.refresh()
             }
         }

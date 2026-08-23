@@ -191,15 +191,17 @@ struct QuotaMenuView: View {
 
             HStack(spacing: 8) {
                 Button {
-                    monitor.enableMonitoring()
+                    Task { await monitor.activateOrRefreshMonitoring() }
                 } label: {
                     Label(
-                        monitor.monitoringEnabled ? "额度监控已启用" : "启用额度监控",
-                        systemImage: monitor.monitoringEnabled ? "checkmark.circle.fill" : "waveform.path.ecg"
+                        monitor.isRefreshing
+                            ? "刷新中…"
+                            : (monitor.monitoringEnabled ? "刷新额度" : "启用额度监控"),
+                        systemImage: monitor.monitoringEnabled ? "arrow.clockwise.circle.fill" : "waveform.path.ecg"
                     )
                         .frame(maxWidth: .infinity)
                 }
-                .disabled(monitor.monitoringEnabled)
+                .disabled(monitor.isRefreshing)
 
                 Button {
                     Task { await monitor.requestAtollAuthorization() }

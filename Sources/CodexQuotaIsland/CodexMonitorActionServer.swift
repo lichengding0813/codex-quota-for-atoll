@@ -1,14 +1,14 @@
 import Foundation
 import Network
 
-/// Serves one token-protected, loopback-only action for Atoll's web card.
+/// Serves one token-protected, loopback-only refresh action for Atoll's web card.
 final class CodexMonitorActionServer {
     private let token = UUID().uuidString
     private let queue = DispatchQueue(label: "com.dinglicheng.CodexQuotaIsland.monitor-action")
     private var listener: NWListener?
     private var readyContinuation: CheckedContinuation<UInt16?, Never>?
 
-    var onEnableMonitoring: (@MainActor () -> Void)?
+    var onRefreshMonitoring: (@MainActor () async -> Void)?
 
     deinit {
         stop()
@@ -41,7 +41,7 @@ final class CodexMonitorActionServer {
     }
 
     func endpointURL(port: UInt16) -> String {
-        "http://127.0.0.1:\(port)/enable-monitoring?token=\(token)"
+        "http://127.0.0.1:\(port)/refresh-monitoring?token=\(token)"
     }
 
     private func stop() {
@@ -75,25 +75,36 @@ final class CodexMonitorActionServer {
             }
 
             let request = data.map { String(decoding: $0, as: UTF8.self) } ?? ""
-            let validPrefix = "GET /enable-monitoring?token=\(self.token) "
+            let validPrefix = "GET /refresh-monitoring?token=\(self.token) "
             let isValid = request.hasPrefix(validPrefix)
             if isValid {
-                Task { @MainActor in self.onEnableMonitoring?() }
+                Task { @MainActor [weak self] in
+                    guard let self else {
+                        connection.cancel()
+                        return
+                    }
+                    await self.onRefreshMonitoring?()
+                    self.sendResponse("204 No Content", over: connection)
+                }
+                return
             }
 
-            let status = isValid ? "204 No Content" : "403 Forbidden"
-            let response = """
-            HTTP/1.1 \(status)\r
-            Access-Control-Allow-Origin: *\r
-            Cache-Control: no-store\r
-            Content-Length: 0\r
-            Connection: close\r
-            \r
-
-            """
-            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
-                connection.cancel()
-            })
+            self.sendResponse("403 Forbidden", over: connection)
         }
+    }
+
+    private func sendResponse(_ status: String, over connection: NWConnection) {
+        let response = """
+        HTTP/1.1 \(status)\r
+        Access-Control-Allow-Origin: *\r
+        Cache-Control: no-store\r
+        Content-Length: 0\r
+        Connection: close\r
+        \r
+
+        """
+        connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in
+            connection.cancel()
+        })
     }
 }
