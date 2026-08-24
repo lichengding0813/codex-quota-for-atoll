@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.2 — 2026-08-24
+
+- Keep the menu-bar monitor alive when macOS hides its MenuBarExtra, while preserving explicit Quit and system shutdown.
+- Persist monitoring across relaunches and restart the 60/15-second refresh loop automatically.
+- Acknowledge Atoll card actions before replacing their WebView, avoiding false “refresh failed” feedback.
+- Mark card data stale after 150 seconds without an update instead of leaving a false online state.
+- Derive the previous reset directly from the current quota window so reset-card use is reflected immediately.
+
 ## 0.4.1 — 2026-08-24
 
 - Reflow the 30-day heatmap to 3 rows × 10 columns so it stays within the card height.

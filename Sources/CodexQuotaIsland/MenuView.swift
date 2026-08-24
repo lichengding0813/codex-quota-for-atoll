@@ -225,7 +225,7 @@ struct QuotaMenuView: View {
                 .disabled(!monitor.atollCardVisible)
                 Spacer()
                 Button("退出") {
-                    NSApplication.shared.terminate(nil)
+                    AppTerminationController.requestQuit()
                 }
             }
             .font(.caption)

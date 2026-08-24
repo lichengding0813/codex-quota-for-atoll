@@ -78,13 +78,12 @@ final class CodexMonitorActionServer {
             let validPrefix = "GET /refresh-monitoring?token=\(self.token) "
             let isValid = request.hasPrefix(validPrefix)
             if isValid {
+                // Acknowledge before refreshing. Publishing the refreshed Atoll
+                // descriptor replaces the WebView that issued this request, so
+                // waiting for the refresh could surface a false fetch failure.
+                self.sendResponse("202 Accepted", over: connection)
                 Task { @MainActor [weak self] in
-                    guard let self else {
-                        connection.cancel()
-                        return
-                    }
-                    await self.onRefreshMonitoring?()
-                    self.sendResponse("204 No Content", over: connection)
+                    await self?.onRefreshMonitoring?()
                 }
                 return
             }

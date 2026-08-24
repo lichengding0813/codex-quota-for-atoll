@@ -4,12 +4,13 @@ import Foundation
 @MainActor
 final class QuotaMonitor: ObservableObject {
     static let shared = QuotaMonitor()
+    private static let monitoringEnabledKey = "monitoring.enabled"
 
     @Published private(set) var snapshot: QuotaSnapshot?
     @Published private(set) var isRefreshing = false
     @Published private(set) var codexStatus = "等待首次刷新"
     @Published private(set) var codexConnected = false
-    @Published private(set) var monitoringEnabled = false
+    @Published private(set) var monitoringEnabled: Bool
     @Published private(set) var atollStatus = "正在连接 Atoll"
     @Published private(set) var atollAuthorized = false
     @Published private(set) var atollCardVisible = false
@@ -22,6 +23,16 @@ final class QuotaMonitor: ObservableObject {
     private var started = false
 
     private init() {
+        let defaults = UserDefaults.standard
+        if let savedValue = defaults.object(forKey: Self.monitoringEnabledKey) as? Bool {
+            monitoringEnabled = savedValue
+        } else {
+            // Migrate existing installations whose in-memory opt-in was lost
+            // whenever the menu-bar process was relaunched.
+            monitoringEnabled = true
+            defaults.set(true, forKey: Self.monitoringEnabledKey)
+        }
+
         atoll.onAuthorizationChange = { [weak self] authorized in
             guard let self else { return }
             self.atollAuthorized = authorized
@@ -53,6 +64,9 @@ final class QuotaMonitor: ObservableObject {
         guard !started else { return }
         started = true
         await refresh(requestAuthorizationIfNeeded: true)
+        if monitoringEnabled {
+            startRefreshLoop()
+        }
     }
 
     func refresh(requestAuthorizationIfNeeded: Bool = false) async {
@@ -134,6 +148,7 @@ final class QuotaMonitor: ObservableObject {
     func activateOrRefreshMonitoring() async {
         if !monitoringEnabled {
             monitoringEnabled = true
+            UserDefaults.standard.set(true, forKey: Self.monitoringEnabledKey)
             startRefreshLoop()
         }
 

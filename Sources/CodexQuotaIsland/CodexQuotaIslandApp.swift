@@ -2,9 +2,23 @@ import AppKit
 import SwiftUI
 
 @MainActor
+enum AppTerminationController {
+    private(set) static var allowsTermination = false
+
+    static func requestQuit() {
+        allowsTermination = true
+        NSApplication.shared.terminate(nil)
+    }
+
+    static func allowSystemTermination() {
+        allowsTermination = true
+    }
+}
+
+@MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var previewWindow: NSWindow?
-    private var acceptsTermination = false
+    private var powerOffObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let showsPreview = ProcessInfo.processInfo.arguments.contains("--preview-window")
@@ -13,12 +27,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await QuotaMonitor.shared.start()
         }
 
-        // Control Center can send a visibility-driven terminate event while a
-        // freshly signed MenuBarExtra is registering. Ignore only that brief
-        // launch-time event; normal Quit and system termination work after it.
-        Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
-            self?.acceptsTermination = true
+        // A hidden MenuBarExtra can receive a visibility-driven termination
+        // request from Control Center. Keep the monitor alive for its loopback
+        // card action, while still allowing an explicit Quit and system poweroff.
+        powerOffObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.willPowerOffNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            Task { @MainActor in
+                AppTerminationController.allowSystemTermination()
+            }
         }
 
         if showsPreview {
@@ -27,7 +46,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        acceptsTermination ? .terminateNow : .terminateCancel
+        AppTerminationController.allowsTermination ? .terminateNow : .terminateCancel
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let powerOffObserver {
+            NSWorkspace.shared.notificationCenter.removeObserver(powerOffObserver)
+        }
     }
 
     private func showPreviewWindow() {
