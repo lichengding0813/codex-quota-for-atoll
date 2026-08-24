@@ -1,6 +1,6 @@
 # Codex Quota for Atoll
 
-在 macOS 的 [Atoll](https://github.com/Ebullioscopic/Atoll) 翻页卡片中查看 Codex 剩余额度、重置时间与 token 用量。
+在 macOS 的 [Atoll](https://github.com/Ebullioscopic/Atoll) 翻页卡片中查看 Codex 剩余额度、30 天 token 使用热力与重置时间。
 
 > 非官方社区插件，与 OpenAI 或 Atoll 官方无隶属关系。
 
@@ -9,7 +9,8 @@
 ## 功能
 
 - 单页横向卡片，无需下拉滚动。
-- 60% / 20% / 20% 布局：额度与长进度条、重置时间、近 7 天与累计用量。
+- 60% / 20% / 20% 布局：额度与长进度条、5 × 6 的近 30 天 token 热力图、上次与下次重置时间。
+- 自动补齐没有活动的日期，并以 4 档绿色深浅呈现每天的相对用量。
 - 右上角集中显示 Codex/Atoll 连接状态、更新时间与监控按钮；启用后按钮变为“刷新额度”，可随时重复执行。
 - `PLUS` 位于额度进度条下方；不显示“今天”统计或重置估算标记。
 - 启动时读取一次数据，启用监控后在线时每 60 秒自动刷新；离线时每 15 秒重试，也可点“刷新额度”立即重连。
@@ -39,7 +40,7 @@
 
 ## 数据与隐私
 
-应用通过本机 `codex app-server --stdio` 调用 `account/rateLimits/read` 和 `account/usage/read`。额度数据不会上传到本项目维护的服务器；卡片按钮只访问应用自身随机端口和随机令牌保护的 loopback 地址。
+应用通过本机 `codex app-server --stdio` 调用 `account/rateLimits/read` 和 `account/usage/read`。30 天热力图使用后者返回的按日 token 数据，缺失日期按无活动处理。额度数据不会上传到本项目维护的服务器；卡片按钮只访问应用自身随机端口和随机令牌保护的 loopback 地址。
 
 ## 从源码构建
 
@@ -62,7 +63,7 @@ swift build -c release
 - Atoll 集成：`AtollNotchExperienceDescriptor`
 - UI：SwiftUI 菜单栏应用 + Atoll 交互式 Web 卡片
 - 最低系统：macOS 13
-- 当前版本：0.3.1
+- 当前版本：0.4.0
 
 欢迎提交 Issue 和 Pull Request。
 

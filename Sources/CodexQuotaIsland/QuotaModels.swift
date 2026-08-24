@@ -71,12 +71,18 @@ struct ResetObservation: Sendable, Equatable {
     let isEstimated: Bool
 }
 
+struct DailyTokenUsage: Sendable, Equatable {
+    let date: Date
+    let tokens: Int64
+}
+
 struct QuotaSnapshot: Sendable, Equatable {
     let planType: String?
     let windows: [QuotaWindow]
     let todayTokens: Int64
     let lastSevenDaysTokens: Int64
     let lifetimeTokens: Int64?
+    let recentDailyUsage: [DailyTokenUsage]
     let fetchedAt: Date
     var lastReset: ResetObservation?
 
@@ -131,16 +137,28 @@ struct QuotaSnapshot: Sendable, Equatable {
         let isoDay = DateFormatter.isoDay
         let startOfToday = calendar.startOfDay(for: now)
         let sevenDaysAgo = calendar.date(byAdding: .day, value: -6, to: startOfToday) ?? startOfToday
+        let thirtyDaysAgo = calendar.date(byAdding: .day, value: -29, to: startOfToday) ?? startOfToday
         var todayTokens: Int64 = 0
         var lastSevenDaysTokens: Int64 = 0
+        var tokensByDay: [Date: Int64] = [:]
         for bucket in usage?.dailyUsageBuckets ?? [] {
             guard let date = isoDay.date(from: bucket.startDate) else { continue }
+            let day = calendar.startOfDay(for: date)
+            guard day >= thirtyDaysAgo, day <= startOfToday else { continue }
+            tokensByDay[day, default: 0] += bucket.tokens
             if calendar.isDate(date, inSameDayAs: now) {
                 todayTokens += bucket.tokens
             }
-            if date >= sevenDaysAgo && date <= now {
+            if day >= sevenDaysAgo && day <= startOfToday {
                 lastSevenDaysTokens += bucket.tokens
             }
+        }
+
+        let recentDailyUsage: [DailyTokenUsage] = (0..<30).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset, to: thirtyDaysAgo) else {
+                return nil
+            }
+            return DailyTokenUsage(date: date, tokens: tokensByDay[date, default: 0])
         }
 
         return QuotaSnapshot(
@@ -149,6 +167,7 @@ struct QuotaSnapshot: Sendable, Equatable {
             todayTokens: todayTokens,
             lastSevenDaysTokens: lastSevenDaysTokens,
             lifetimeTokens: usage?.summary?.lifetimeTokens,
+            recentDailyUsage: recentDailyUsage,
             fetchedAt: now,
             lastReset: nil
         )

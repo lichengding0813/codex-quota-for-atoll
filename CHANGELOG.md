@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.0 — 2026-08-24
+
+- Normalize sparse daily token buckets into a fixed 30-day activity series.
+- Replace the 7-day and lifetime metrics with a 5 × 6 usage heatmap.
+- Keep the 60% / 20% / 20% layout and move both reset times to the right column.
+- Add model coverage for missing days, duplicate daily buckets, and the 30-day boundary.
+
 ## 0.3.1 — 2026-08-23
 
 - Keep the Atoll card action enabled after monitoring starts.

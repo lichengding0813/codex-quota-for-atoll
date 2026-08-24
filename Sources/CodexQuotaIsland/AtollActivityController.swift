@@ -185,8 +185,7 @@ final class AtollActivityController {
             plan: plan,
             nextReset: formattedDate(window.resetsAt),
             lastReset: lastResetDate,
-            sevenDays: snapshot.lastSevenDaysTokens.abbreviatedTokenCount,
-            lifetime: snapshot.lifetimeTokens?.abbreviatedTokenCount ?? "—",
+            dailyUsage: snapshot.recentDailyUsage,
             updatedAt: updatedAt,
             codexConnected: codexConnected,
             monitoringEnabled: monitoringEnabled,
@@ -232,8 +231,7 @@ final class AtollActivityController {
         plan: String,
         nextReset: String,
         lastReset: String,
-        sevenDays: String,
-        lifetime: String,
+        dailyUsage: [DailyTokenUsage],
         updatedAt: String,
         codexConnected: Bool,
         monitoringEnabled: Bool,
@@ -246,8 +244,9 @@ final class AtollActivityController {
         let buttonClass = monitoringEnabled ? "enabled" : ""
         let buttonDisabled = actionURL == nil ? "disabled" : ""
         let safeActionURL = escapeJavaScriptSingleQuoted(actionURL ?? "")
-        let safe = [plan, nextReset, lastReset, sevenDays, lifetime, updatedAt, connectionLabel, buttonLabel]
+        let safe = [plan, nextReset, lastReset, updatedAt, connectionLabel, buttonLabel]
             .map(escapeHTML)
+        let heatmap = heatmapCellsHTML(for: dailyUsage)
 
         return """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -256,13 +255,34 @@ final class AtollActivityController {
         .card{height:92px;padding:6px 10px 7px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:rgba(255,255,255,.045);overflow:hidden}
         .top{height:22px;display:flex;align-items:flex-start;justify-content:flex-end}.controls{display:flex;align-items:center;justify-content:flex-end;gap:7px;white-space:nowrap;color:rgba(255,255,255,.48);font-size:7.5px}.state{display:flex;align-items:center;gap:3px}.dot{display:inline-block;width:4px;height:4px;border-radius:50%}.online,.atoll{background:#2ed18f}.offline{background:#ff5a5f}.sep{color:rgba(255,255,255,.18)}.updated{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.38)}button{height:20px;padding:0 8px;border:1px solid rgba(46,209,143,.34);border-radius:7px;background:rgba(46,209,143,.13);color:#dfffee;font:600 8px/18px -apple-system,sans-serif;cursor:pointer}button:active{transform:scale(.98);background:rgba(46,209,143,.22)}button.enabled{border-color:rgba(46,209,143,.46);background:rgba(46,209,143,.16)}button:disabled{cursor:wait;opacity:.58}
         .data{height:57px;display:grid;grid-template-columns:3fr 1fr 1fr;gap:10px;align-items:stretch}.quota{display:flex;flex-direction:column;justify-content:center;padding-right:2px}.quota-head{display:flex;align-items:baseline;gap:7px}.pct{font:720 25px/26px ui-rounded,-apple-system,sans-serif;color:\(accent);letter-spacing:-.8px}.quota-label{font-size:8px;color:rgba(255,255,255,.42)}.bar{height:5px;margin:5px 0 4px;border-radius:9px;background:rgba(255,255,255,.13);overflow:hidden}.fill{height:100%;width:\(remaining)%;background:\(accent);border-radius:9px}.plan{font:650 8px/9px -apple-system,sans-serif;letter-spacing:.65px;color:rgba(255,255,255,.55)}
-        .reset,.usage{display:flex;flex-direction:column;justify-content:center;border-left:1px solid rgba(255,255,255,.08);padding-left:10px}.row,.metric{display:flex;align-items:baseline;justify-content:space-between;gap:5px;line-height:23px;white-space:nowrap}.row span,.label{font-size:7.5px;color:rgba(255,255,255,.43)}.row b{font-size:9px;font-weight:620;font-variant-numeric:tabular-nums}.value{font:650 9.5px/12px ui-monospace,"SF Mono",monospace;white-space:nowrap}
+        .heat,.reset{border-left:1px solid rgba(255,255,255,.08)}.heat{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding-left:8px}.heat-title{font:600 7.5px/8px -apple-system,sans-serif;color:rgba(255,255,255,.45);letter-spacing:.2px}.heat-grid{display:grid;grid-template-columns:repeat(5,7px);grid-template-rows:repeat(6,7px);grid-auto-flow:row;gap:2px}.day{width:7px;height:7px;border-radius:2px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.025)}.l1{background:#0e4429}.l2{background:#006d32}.l3{background:#26a641}.l4{background:#39d353}.reset{display:flex;flex-direction:column;justify-content:center;padding-left:10px}.row{display:flex;align-items:baseline;justify-content:space-between;gap:5px;line-height:23px;white-space:nowrap}.row span{font-size:7.5px;color:rgba(255,255,255,.43)}.row b{font-size:9px;font-weight:620;font-variant-numeric:tabular-nums}
         </style></head><body><div class="card">
-          <div class="top"><div class="controls"><span class="state"><i class="dot \(connectionClass)"></i>\(safe[6])</span><span class="sep">·</span><span class="state"><i class="dot atoll"></i>Atoll 在线</span><span class="updated">更新 \(safe[5])</span><button id="monitor" class="\(buttonClass)" onclick="refreshMonitoring()" \(buttonDisabled)>\(safe[7])</button></div></div>
-          <div class="data"><div class="quota"><div class="quota-head"><div class="pct">\(remaining)%</div><div class="quota-label">剩余额度</div></div><div class="bar"><div class="fill"></div></div><div class="plan">\(safe[0])</div></div><div class="reset"><div class="row"><span>下次</span><b>\(safe[1])</b></div><div class="row"><span>上次</span><b>\(safe[2])</b></div></div><div class="usage"><div class="metric"><div class="label">近 7 天</div><div class="value">\(safe[3])</div></div><div class="metric"><div class="label">累计</div><div class="value">\(safe[4])</div></div></div></div>
+          <div class="top"><div class="controls"><span class="state"><i class="dot \(connectionClass)"></i>\(safe[4])</span><span class="sep">·</span><span class="state"><i class="dot atoll"></i>Atoll 在线</span><span class="updated">更新 \(safe[3])</span><button id="monitor" class="\(buttonClass)" onclick="refreshMonitoring()" \(buttonDisabled)>\(safe[5])</button></div></div>
+          <div class="data"><div class="quota"><div class="quota-head"><div class="pct">\(remaining)%</div><div class="quota-label">剩余额度</div></div><div class="bar"><div class="fill"></div></div><div class="plan">\(safe[0])</div></div><div class="heat"><div class="heat-title">近 30 天</div><div class="heat-grid" aria-label="近 30 天 token 使用热力图">\(heatmap)</div></div><div class="reset"><div class="row"><span>上次</span><b>\(safe[2])</b></div><div class="row"><span>下次</span><b>\(safe[1])</b></div></div></div>
         <script>async function refreshMonitoring(){const b=document.getElementById('monitor');if(b.disabled)return;const first=!b.classList.contains('enabled');b.disabled=true;b.textContent=first?'正在启用…':'刷新中…';try{const r=await fetch('\(safeActionURL)',{cache:'no-store'});if(!r.ok)throw new Error();b.className='enabled';b.textContent='已刷新 ✓';setTimeout(()=>{b.disabled=false;b.textContent='刷新额度'},650)}catch(e){b.disabled=false;b.textContent=first?'启用失败，重试':'刷新失败，重试'}}</script>
         </div></body></html>
         """
+    }
+
+    private func heatmapCellsHTML(for usage: [DailyTokenUsage]) -> String {
+        let peak = max(usage.map(\.tokens).max() ?? 0, 1)
+        let dateFormatter = DateFormatter()
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
+        dateFormatter.locale = Locale(identifier: "zh_CN")
+        dateFormatter.timeZone = .current
+        dateFormatter.dateFormat = "M月d日"
+
+        return usage.suffix(30).map { day in
+            let level: Int
+            if day.tokens <= 0 {
+                level = 0
+            } else {
+                let ratio = log1p(Double(day.tokens)) / log1p(Double(peak))
+                level = max(1, min(4, Int(ceil(ratio * 4))))
+            }
+            let detail = "\(dateFormatter.string(from: day.date)) · \(day.tokens.abbreviatedTokenCount) tokens"
+            return "<i class=\"day l\(level)\" title=\"\(escapeHTML(detail))\"></i>"
+        }.joined()
     }
 
     private func escapeHTML(_ text: String) -> String {

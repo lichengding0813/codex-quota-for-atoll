@@ -40,6 +40,45 @@ final class QuotaModelTests: XCTestCase {
         XCTAssertEqual(snapshot.todayTokens, 3_400)
         XCTAssertEqual(snapshot.lastSevenDaysTokens, 4_600)
         XCTAssertEqual(snapshot.lifetimeTokens, 1_000_000)
+        XCTAssertEqual(snapshot.recentDailyUsage.count, 30)
+        XCTAssertEqual(snapshot.recentDailyUsage.first?.tokens, 0)
+        XCTAssertEqual(snapshot.recentDailyUsage.suffix(2).map(\.tokens), [1_200, 3_400])
+        XCTAssertTrue(calendar.isDate(snapshot.recentDailyUsage.last!.date, inSameDayAs: now))
+    }
+
+    func testNormalizesSparseAndDuplicateDailyUsage() throws {
+        let ratesJSON = """
+        {
+          "rateLimits": {
+            "limitId": "codex", "limitName": null, "primary": null,
+            "secondary": null, "planType": "plus", "rateLimitReachedType": null
+          },
+          "rateLimitsByLimitId": null
+        }
+        """
+        let usageJSON = """
+        {
+          "summary": null,
+          "dailyUsageBuckets": [
+            {"startDate": "2026-08-19", "tokens": 100},
+            {"startDate": "2026-08-19", "tokens": 250},
+            {"startDate": "2026-08-21", "tokens": 700},
+            {"startDate": "2026-07-01", "tokens": 9999}
+          ]
+        }
+        """
+        let decoder = JSONDecoder()
+        let rates = try decoder.decode(RateLimitsPayload.self, from: Data(ratesJSON.utf8))
+        let usage = try decoder.decode(UsagePayload.self, from: Data(usageJSON.utf8))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = DateFormatter.isoDay.date(from: "2026-08-21")!.addingTimeInterval(12 * 3600)
+
+        let snapshot = QuotaSnapshot.make(rateLimits: rates, usage: usage, now: now, calendar: calendar)
+
+        XCTAssertEqual(snapshot.recentDailyUsage.count, 30)
+        XCTAssertEqual(snapshot.recentDailyUsage.suffix(3).map(\.tokens), [350, 0, 700])
+        XCTAssertEqual(snapshot.recentDailyUsage.map(\.tokens).reduce(0, +), 1_050)
     }
 
     func testClampsRemainingPercentage() {
