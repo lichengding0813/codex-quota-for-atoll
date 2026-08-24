@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.3 — 2026-08-24
+
+- Fill the 3 × 10 activity heatmap vertically by column, matching ChatGPT's usage layout: days 1–3 in the first column, 4–6 in the second, and so on.
+
 ## 0.4.2 — 2026-08-24
 
 - Keep the menu-bar monitor alive when macOS hides its MenuBarExtra, while preserving explicit Quit and system shutdown.
