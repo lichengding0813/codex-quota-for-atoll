@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-08-24
+
+- Reflow the 30-day heatmap to 3 rows × 10 columns so it stays within the card height.
+- Rename the Atoll card header to “Codex 额度监控” and remove the visible heatmap caption.
+- Show `PLUS`, 7-day usage, and lifetime usage together below the quota progress bar.
+
 ## 0.4.0 — 2026-08-24
 
 - Normalize sparse daily token buckets into a fixed 30-day activity series.
