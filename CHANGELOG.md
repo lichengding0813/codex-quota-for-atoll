@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0 — 2026-08-26
+
+- Read both Codex rate-limit windows: the 300-minute primary window and the 10,080-minute secondary quota window.
+- Replace the single large quota percentage with stacked 5-hour and 7-day progress bars in the left 60% column.
+- Keep previous/next reset dates tied to the 7-day quota window.
+- Show both windows in the menu-bar popover while preserving the 7-day percentage in the status item.
+
 ## 0.4.3 — 2026-08-24
 
 - Fill the 3 × 10 activity heatmap vertically by column, matching ChatGPT's usage layout: days 1–3 in the first column, 4–6 in the second, and so on.

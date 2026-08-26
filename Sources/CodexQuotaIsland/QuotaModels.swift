@@ -91,6 +91,30 @@ struct QuotaSnapshot: Sendable, Equatable {
             ?? windows.min(by: { $0.remainingPercent < $1.remainingPercent })
     }
 
+    /// The longest Codex window is the account quota window (currently 7 days).
+    var quotaWindow: QuotaWindow? {
+        let codexWindows = windows.filter { $0.limitID == "codex" }
+        return codexWindows.max {
+            ($0.windowDurationMinutes ?? 0) < ($1.windowDurationMinutes ?? 0)
+        } ?? primaryWindow
+    }
+
+    /// A shorter Codex window that refreshes independently (currently 5 hours).
+    var shortTermWindow: QuotaWindow? {
+        guard let quotaWindow,
+              let quotaDuration = quotaWindow.windowDurationMinutes
+        else { return nil }
+
+        return windows
+            .filter {
+                $0.limitID == "codex"
+                    && ($0.windowDurationMinutes ?? quotaDuration) < quotaDuration
+            }
+            .min {
+                ($0.windowDurationMinutes ?? .max) < ($1.windowDurationMinutes ?? .max)
+            }
+    }
+
     static func make(
         rateLimits: RateLimitsPayload,
         usage: UsagePayload?,

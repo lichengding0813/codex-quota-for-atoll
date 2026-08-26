@@ -92,13 +92,15 @@ final class AtollActivityController {
         forcePresent: Bool = false
     ) async throws {
         try validateExtensionHost()
-        guard let primary = snapshot.primaryWindow else { return }
+        guard let quotaWindow = snapshot.quotaWindow else { return }
+        let shortTermWindow = snapshot.shortTermWindow
         let actionURL = await monitorActionServer.start().map {
             monitorActionServer.endpointURL(port: $0)
         }
         let descriptor = makeDescriptor(
             snapshot: snapshot,
-            window: primary,
+            shortTermWindow: shortTermWindow,
+            quotaWindow: quotaWindow,
             codexConnected: codexConnected,
             monitoringEnabled: monitoringEnabled,
             actionURL: actionURL
@@ -163,13 +165,16 @@ final class AtollActivityController {
 
     private func makeDescriptor(
         snapshot: QuotaSnapshot,
-        window: QuotaWindow,
+        shortTermWindow: QuotaWindow?,
+        quotaWindow: QuotaWindow,
         codexConnected: Bool,
         monitoringEnabled: Bool,
         actionURL: String?
     ) -> AtollNotchExperienceDescriptor {
-        let remaining = window.remainingPercent
-        let color = accentColor(for: remaining)
+        let quotaRemaining = quotaWindow.remainingPercent
+        let shortTermRemaining = shortTermWindow?.remainingPercent
+        let lowestRemaining = min(quotaRemaining, shortTermRemaining ?? quotaRemaining)
+        let color = accentColor(for: lowestRemaining)
         let lastResetDate: String = {
             guard let observation = snapshot.lastReset else {
                 return "暂无记录"
@@ -181,11 +186,14 @@ final class AtollActivityController {
             .dateTime.hour().minute().locale(Locale(identifier: "zh_CN"))
         )
         let compactCard = makeCompactCardHTML(
-            remaining: remaining,
+            shortTermRemaining: shortTermRemaining,
+            shortTermLabel: shortTermWindow.map(shortTermLabel) ?? "",
+            quotaRemaining: quotaRemaining,
+            quotaLabel: quotaWindow.durationLabel,
             plan: plan,
             sevenDays: snapshot.lastSevenDaysTokens.abbreviatedTokenCount,
             lifetime: snapshot.lifetimeTokens?.abbreviatedTokenCount ?? "—",
-            nextReset: formattedDate(window.resetsAt),
+            nextReset: formattedDate(quotaWindow.resetsAt),
             lastReset: lastResetDate,
             dailyUsage: snapshot.recentDailyUsage,
             updatedAt: updatedAt,
@@ -198,12 +206,13 @@ final class AtollActivityController {
         return AtollNotchExperienceDescriptor(
             id: Self.experienceID,
             bundleIdentifier: Bundle.main.bundleIdentifier ?? "com.dinglicheng.CodexQuotaIsland",
-            priority: remaining <= 10 ? .high : .normal,
+            priority: lowestRemaining <= 10 ? .high : .normal,
             accentColor: color,
             metadata: [
-                "usedPercent": "\(window.usedPercent)",
-                "remainingPercent": "\(remaining)",
-                "windowMinutes": "\(window.windowDurationMinutes ?? 0)",
+                "shortTermUsedPercent": "\(shortTermWindow?.usedPercent ?? 0)",
+                "shortTermWindowMinutes": "\(shortTermWindow?.windowDurationMinutes ?? 0)",
+                "quotaUsedPercent": "\(quotaWindow.usedPercent)",
+                "quotaWindowMinutes": "\(quotaWindow.windowDurationMinutes ?? 0)",
                 "surface": "extension-tab"
             ],
             tab: .init(
@@ -230,7 +239,10 @@ final class AtollActivityController {
     }
 
     private func makeCompactCardHTML(
-        remaining: Int,
+        shortTermRemaining: Int?,
+        shortTermLabel: String,
+        quotaRemaining: Int,
+        quotaLabel: String,
         plan: String,
         sevenDays: String,
         lifetime: String,
@@ -243,16 +255,34 @@ final class AtollActivityController {
         monitoringEnabled: Bool,
         actionURL: String?
     ) -> String {
-        let accent = cssAccent(for: remaining)
+        let shortTermAccent = cssAccent(for: shortTermRemaining ?? quotaRemaining)
+        let quotaAccent = cssAccent(for: quotaRemaining)
         let connectionLabel = codexConnected ? "Codex 在线" : "Codex 离线"
         let connectionClass = codexConnected ? "online" : "offline"
         let buttonLabel = monitoringEnabled ? "刷新额度" : "启用额度监控"
         let buttonClass = monitoringEnabled ? "enabled" : ""
         let buttonDisabled = actionURL == nil ? "disabled" : ""
         let safeActionURL = escapeJavaScriptSingleQuoted(actionURL ?? "")
-        let safe = [plan, sevenDays, lifetime, nextReset, lastReset, updatedAt, connectionLabel, buttonLabel]
+        let safe = [
+            plan,
+            sevenDays,
+            lifetime,
+            nextReset,
+            lastReset,
+            updatedAt,
+            connectionLabel,
+            buttonLabel,
+            shortTermLabel,
+            quotaLabel
+        ]
             .map(escapeHTML)
         let heatmap = heatmapCellsHTML(for: dailyUsage)
+        let shortTermLimitHTML: String = {
+            guard let shortTermRemaining else { return "" }
+            return """
+            <div class="limit"><div class="limit-head"><span>\(safe[8])</span><b style="color:\(shortTermAccent)">\(shortTermRemaining)%</b></div><div class="bar"><div class="fill" style="width:\(shortTermRemaining)%;background:\(shortTermAccent)"></div></div></div>
+            """
+        }()
 
         return """
         <!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -260,11 +290,11 @@ final class AtollActivityController {
         *{box-sizing:border-box}html,body{margin:0;width:100%;height:92px;overflow:hidden;background:transparent;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif}
         .card{height:92px;padding:6px 10px 7px;border:1px solid rgba(255,255,255,.075);border-radius:15px;background:rgba(255,255,255,.045);overflow:hidden}
         .top{height:22px;display:flex;align-items:flex-start;justify-content:flex-end}.controls{display:flex;align-items:center;justify-content:flex-end;gap:7px;white-space:nowrap;color:rgba(255,255,255,.48);font-size:7.5px}.state{display:flex;align-items:center;gap:3px}.dot{display:inline-block;width:4px;height:4px;border-radius:50%}.online,.atoll{background:#2ed18f}.offline{background:#ff5a5f}.stale{background:#ffb020}.sep{color:rgba(255,255,255,.18)}.updated{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.38)}button{height:20px;padding:0 8px;border:1px solid rgba(46,209,143,.34);border-radius:7px;background:rgba(46,209,143,.13);color:#dfffee;font:600 8px/18px -apple-system,sans-serif;cursor:pointer}button:active{transform:scale(.98);background:rgba(46,209,143,.22)}button.enabled{border-color:rgba(46,209,143,.46);background:rgba(46,209,143,.16)}button:disabled{cursor:wait;opacity:.58}
-        .data{height:57px;display:grid;grid-template-columns:3fr 1fr 1fr;gap:10px;align-items:stretch}.quota{display:flex;flex-direction:column;justify-content:center;padding-right:2px}.quota-head{display:flex;align-items:baseline;gap:7px}.pct{font:720 25px/26px ui-rounded,-apple-system,sans-serif;color:\(accent);letter-spacing:-.8px}.quota-label{font-size:8px;color:rgba(255,255,255,.42)}.bar{height:5px;margin:5px 0 4px;border-radius:9px;background:rgba(255,255,255,.13);overflow:hidden}.fill{height:100%;width:\(remaining)%;background:\(accent);border-radius:9px}.quota-foot{display:grid;grid-template-columns:auto 1fr 1fr;align-items:baseline;column-gap:13px;line-height:9px}.plan{font:650 8px/9px -apple-system,sans-serif;letter-spacing:.65px;color:rgba(255,255,255,.55)}.foot-metric{display:flex;align-items:baseline;justify-content:flex-end;gap:4px;white-space:nowrap}.foot-metric span{font-size:7.5px;color:rgba(255,255,255,.4)}.foot-metric b{font:650 8.5px/9px ui-monospace,"SF Mono",monospace;color:rgba(255,255,255,.72)}
+        .data{height:57px;display:grid;grid-template-columns:3fr 1fr 1fr;gap:10px;align-items:stretch}.quota{height:57px;display:flex;flex-direction:column;justify-content:space-between;padding-right:2px}.limits{display:grid;grid-template-rows:repeat(2,auto);gap:3px}.limit-head{height:10px;display:flex;align-items:baseline;justify-content:space-between;gap:8px;white-space:nowrap}.limit-head span{font-size:7.5px;color:rgba(255,255,255,.46)}.limit-head b{font:700 10px/10px ui-rounded,-apple-system,sans-serif;letter-spacing:-.15px}.bar{height:4px;margin-top:2px;border-radius:9px;background:rgba(255,255,255,.13);overflow:hidden}.fill{height:100%;border-radius:9px}.quota-foot{display:grid;grid-template-columns:auto 1fr 1fr;align-items:baseline;column-gap:13px;line-height:9px}.plan{font:650 8px/9px -apple-system,sans-serif;letter-spacing:.65px;color:rgba(255,255,255,.55)}.foot-metric{display:flex;align-items:baseline;justify-content:flex-end;gap:4px;white-space:nowrap}.foot-metric span{font-size:7.5px;color:rgba(255,255,255,.4)}.foot-metric b{font:650 8.5px/9px ui-monospace,"SF Mono",monospace;color:rgba(255,255,255,.72)}
         .heat,.reset{border-left:1px solid rgba(255,255,255,.08)}.heat{display:flex;align-items:center;justify-content:center;padding-left:8px}.heat-grid{display:grid;grid-template-columns:repeat(10,8px);grid-template-rows:repeat(3,8px);grid-auto-flow:column;gap:2px}.day{width:8px;height:8px;border-radius:2px;background:rgba(255,255,255,.07);box-shadow:inset 0 0 0 .5px rgba(255,255,255,.025)}.l1{background:#0e4429}.l2{background:#006d32}.l3{background:#26a641}.l4{background:#39d353}.reset{display:flex;flex-direction:column;justify-content:center;padding-left:10px}.row{display:flex;align-items:baseline;justify-content:space-between;gap:5px;line-height:23px;white-space:nowrap}.row span{font-size:7.5px;color:rgba(255,255,255,.43)}.row b{font-size:9px;font-weight:620;font-variant-numeric:tabular-nums}
         </style></head><body><div class="card">
           <div class="top"><div class="controls"><span class="state" id="codexState" data-updated-ms="\(updatedAtEpochMilliseconds)"><i id="codexDot" class="dot \(connectionClass)"></i><span id="codexLabel">\(safe[6])</span></span><span class="sep">·</span><span class="state"><i class="dot atoll"></i>Atoll 在线</span><span class="updated">更新 \(safe[5])</span><button id="monitor" class="\(buttonClass)" onclick="refreshMonitoring()" \(buttonDisabled)>\(safe[7])</button></div></div>
-          <div class="data"><div class="quota"><div class="quota-head"><div class="pct">\(remaining)%</div><div class="quota-label">剩余额度</div></div><div class="bar"><div class="fill"></div></div><div class="quota-foot"><div class="plan">\(safe[0])</div><div class="foot-metric"><span>近7日</span><b>\(safe[1])</b></div><div class="foot-metric"><span>累计</span><b>\(safe[2])</b></div></div></div><div class="heat"><div class="heat-grid" aria-label="近 30 天 token 使用热力图">\(heatmap)</div></div><div class="reset"><div class="row"><span>上次</span><b>\(safe[4])</b></div><div class="row"><span>下次</span><b>\(safe[3])</b></div></div></div>
+          <div class="data"><div class="quota"><div class="limits">\(shortTermLimitHTML)<div class="limit"><div class="limit-head"><span>\(safe[9])</span><b style="color:\(quotaAccent)">\(quotaRemaining)%</b></div><div class="bar"><div class="fill" style="width:\(quotaRemaining)%;background:\(quotaAccent)"></div></div></div></div><div class="quota-foot"><div class="plan">\(safe[0])</div><div class="foot-metric"><span>近7日</span><b>\(safe[1])</b></div><div class="foot-metric"><span>累计</span><b>\(safe[2])</b></div></div></div><div class="heat"><div class="heat-grid" aria-label="近 30 天 token 使用热力图">\(heatmap)</div></div><div class="reset"><div class="row"><span>上次</span><b>\(safe[4])</b></div><div class="row"><span>下次</span><b>\(safe[3])</b></div></div></div>
         <script>function updateFreshness(){const s=document.getElementById('codexState'),d=document.getElementById('codexDot'),l=document.getElementById('codexLabel');if(!s||!d||!l)return;const age=Date.now()-Number(s.dataset.updatedMs);if(age>150000){d.className='dot stale';l.textContent='数据已过期'}}updateFreshness();setInterval(updateFreshness,30000);async function refreshMonitoring(){const b=document.getElementById('monitor');if(b.disabled)return;const first=!b.classList.contains('enabled');b.disabled=true;b.textContent=first?'正在启用…':'刷新中…';try{const r=await fetch('\(safeActionURL)',{cache:'no-store'});if(!r.ok)throw new Error();b.className='enabled';b.textContent=first?'已启用 ✓':'已发送 ✓';setTimeout(()=>{b.disabled=false;b.textContent='刷新额度'},650)}catch(e){b.disabled=false;b.textContent=first?'无法启动，重试':'无法连接，重试'}}</script>
         </div></body></html>
         """
@@ -311,6 +341,14 @@ final class AtollActivityController {
         if remaining <= 20 { return "#ff4a4a" }
         if remaining <= 40 { return "#ff9f1f" }
         return "#2ed18f"
+    }
+
+    private func shortTermLabel(_ window: QuotaWindow) -> String {
+        guard let minutes = window.windowDurationMinutes else { return "短期限额" }
+        if minutes % 60 == 0 {
+            return "\(minutes / 60) 小时"
+        }
+        return "\(minutes) 分钟"
     }
 
     private func formattedDate(_ date: Date?) -> String {

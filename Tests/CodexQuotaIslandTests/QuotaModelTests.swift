@@ -81,6 +81,30 @@ final class QuotaModelTests: XCTestCase {
         XCTAssertEqual(snapshot.recentDailyUsage.map(\.tokens).reduce(0, +), 1_050)
     }
 
+    func testSeparatesFiveHourAndWeeklyQuotaWindows() throws {
+        let json = """
+        {
+          "rateLimits": {
+            "limitId": "codex",
+            "limitName": null,
+            "primary": {"usedPercent": 3, "windowDurationMins": 300, "resetsAt": 1787722530},
+            "secondary": {"usedPercent": 19, "windowDurationMins": 10080, "resetsAt": 1788309330},
+            "planType": "plus",
+            "rateLimitReachedType": null
+          },
+          "rateLimitsByLimitId": null
+        }
+        """
+        let rates = try JSONDecoder().decode(RateLimitsPayload.self, from: Data(json.utf8))
+
+        let snapshot = QuotaSnapshot.make(rateLimits: rates, usage: nil)
+
+        XCTAssertEqual(snapshot.shortTermWindow?.windowDurationMinutes, 300)
+        XCTAssertEqual(snapshot.shortTermWindow?.remainingPercent, 97)
+        XCTAssertEqual(snapshot.quotaWindow?.windowDurationMinutes, 10_080)
+        XCTAssertEqual(snapshot.quotaWindow?.remainingPercent, 81)
+    }
+
     func testClampsRemainingPercentage() {
         let tooHigh = QuotaWindow(
             id: "x-primary",

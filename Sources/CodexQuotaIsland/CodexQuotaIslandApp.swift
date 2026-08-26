@@ -105,7 +105,7 @@ struct CodexQuotaIslandApp: App {
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: "terminal.fill")
-                if let remaining = monitor.snapshot?.primaryWindow?.remainingPercent {
+                if let remaining = monitor.snapshot?.quotaWindow?.remainingPercent {
                     Text("\(remaining)%")
                         .monospacedDigit()
                 }

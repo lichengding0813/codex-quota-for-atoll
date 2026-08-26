@@ -8,8 +8,8 @@ struct QuotaMenuView: View {
             header
 
             if let snapshot = monitor.snapshot,
-               let primary = snapshot.primaryWindow {
-                quotaCard(snapshot: snapshot, primary: primary)
+               let quotaWindow = snapshot.quotaWindow {
+                quotaCard(snapshot: snapshot, quotaWindow: quotaWindow)
                 usageGrid(snapshot: snapshot)
                 statusSection
             } else {
@@ -64,34 +64,51 @@ struct QuotaMenuView: View {
         }
     }
 
-    private func quotaCard(snapshot: QuotaSnapshot, primary: QuotaWindow) -> some View {
+    private func quotaCard(snapshot: QuotaSnapshot, quotaWindow: QuotaWindow) -> some View {
         VStack(alignment: .leading, spacing: 10) {
+            if let shortTermWindow = snapshot.shortTermWindow {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(shortTermWindow.durationLabel.replacingOccurrences(of: "额度", with: "限额"))
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(shortTermWindow.remainingPercent)%")
+                        .font(.system(.subheadline, design: .rounded, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(color(for: shortTermWindow.remainingPercent))
+                }
+
+                ProgressView(value: Double(shortTermWindow.remainingPercent), total: 100)
+                    .progressViewStyle(.linear)
+                    .tint(color(for: shortTermWindow.remainingPercent))
+            }
+
             HStack(alignment: .firstTextBaseline) {
-                Text("剩余额度")
+                Text(quotaWindow.durationLabel)
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("\(primary.remainingPercent)%")
+                Text("\(quotaWindow.remainingPercent)%")
                     .font(.system(size: 26, weight: .bold, design: .rounded))
                     .monospacedDigit()
-                    .foregroundStyle(color(for: primary.remainingPercent))
+                    .foregroundStyle(color(for: quotaWindow.remainingPercent))
             }
 
-            ProgressView(value: Double(primary.remainingPercent), total: 100)
+            ProgressView(value: Double(quotaWindow.remainingPercent), total: 100)
                 .progressViewStyle(.linear)
-                .tint(color(for: primary.remainingPercent))
+                .tint(color(for: quotaWindow.remainingPercent))
 
             HStack {
-                Label(primary.durationLabel, systemImage: "clock.arrow.circlepath")
+                Label("额度窗口", systemImage: "clock.arrow.circlepath")
                 Spacer()
-                Text("已使用 \(primary.usedPercent)%")
+                Text("已使用 \(quotaWindow.usedPercent)%")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
 
             infoRow(
                 title: "下次重置",
-                value: primary.resetsAt?.formatted(
+                value: quotaWindow.resetsAt?.formatted(
                     .dateTime.month().day().weekday(.abbreviated).hour().minute()
                         .locale(Locale(identifier: "zh_CN"))
                 ) ?? "未知"

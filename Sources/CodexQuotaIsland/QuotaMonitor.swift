@@ -77,8 +77,8 @@ final class QuotaMonitor: ObservableObject {
 
         do {
             var newSnapshot = try await codexClient.fetchSnapshot()
-            if let primary = newSnapshot.primaryWindow {
-                newSnapshot.lastReset = resetTracker.observe(primary)
+            if let quotaWindow = newSnapshot.quotaWindow {
+                newSnapshot.lastReset = resetTracker.observe(quotaWindow)
             }
             snapshot = newSnapshot
             codexConnected = true
