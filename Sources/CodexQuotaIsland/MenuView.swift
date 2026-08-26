@@ -68,7 +68,7 @@ struct QuotaMenuView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let shortTermWindow = snapshot.shortTermWindow {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(shortTermWindow.durationLabel.replacingOccurrences(of: "额度", with: "限额"))
+                    Text("5小时限额")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -84,7 +84,7 @@ struct QuotaMenuView: View {
             }
 
             HStack(alignment: .firstTextBaseline) {
-                Text(quotaWindow.durationLabel)
+                Text("剩余用量")
                     .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 Spacer()

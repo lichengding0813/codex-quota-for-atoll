@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.1 — 2026-08-26
+
+- Rename the two progress bars to “5小时限额” and “剩余用量”.
+- Add the 5-hour window's next refresh time to the right column.
+- Compact the right column into three identified rows: 5-hour refresh, previous quota reset, and next quota reset.
+
 ## 0.5.0 — 2026-08-26
 
 - Read both Codex rate-limit windows: the 300-minute primary window and the 10,080-minute secondary quota window.
